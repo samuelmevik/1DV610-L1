@@ -1,5 +1,5 @@
 import { isArray, isFunction, isObject } from './guards.js'
-import { anyFunction, Cases, Condition, ConditionFunction, ConditionObject } from '../typings'
+import { Condition, Cases, ConditionFunction } from '../typings'
 
 const { keys } = Object
 
@@ -8,9 +8,17 @@ const { keys } = Object
  *
  * @param param Accepts nested objects, arrays, numbers and strings.
  */
-function patternMatch (param: any) {
-  return function (...cases: Cases[]) {
-    return cases.find(({ condition }) => checkCondition(condition, param))?.callback()
+function patternMatch<TParam> (param: TParam) {
+  return function<TResult> (
+    ...cases: Cases<TParam, any, TResult>[]
+  ): TResult | undefined {
+    for (const { condition, callback } of cases) {
+      const result = checkCondition(condition, param)
+      if (result !== null) {
+        return callback(result)
+      }
+    }
+    return undefined
   }
 }
 
@@ -20,11 +28,19 @@ function patternMatch (param: any) {
  * @param condition Needs to be a function or a object whose end value is a function. The function needs to return a boolean.
  * @param param Accepts nested objects, arrays, numbers and strings.
  */
-function checkCondition (condition: Condition, param: any) : boolean {
-  if (isObject<ConditionObject>(condition)) {
-    return keys(condition).every(key => checkCondition(condition[key], param[key]))
-  } else if (isFunction<ConditionFunction>(condition)) {
+function checkCondition<TParam, TGuarded extends TParam> (
+  condition: Condition<TParam, TGuarded>,
+  param: TParam
+): param is TGuarded {
+  if (isFunction(condition)) {
     return condition(param)
+  } else if (isObject(condition)) {
+    return (keys(condition) as (keyof TParam)[]).every((key) =>
+      checkCondition(
+        condition[key],
+        (param as any)[key]
+      )
+    )
   }
   return false
 }
@@ -35,7 +51,7 @@ function checkCondition (condition: Condition, param: any) : boolean {
  * @param condition Needs to be a function or a object whose end value is a function. The function needs to return a boolean.
  * @param callback The callback function runs if the condition is true.
  */
-function when (condition: Condition, callback: anyFunction) {
+function when<TParam, TGuarded extends TParam, TResult> (condition: Condition<TParam, TGuarded>, callback: (param: TGuarded) => TResult): Cases<TParam, TGuarded, TResult> {
   return ({
     condition,
     callback
@@ -47,7 +63,7 @@ function when (condition: Condition, callback: anyFunction) {
  *
  * @param callback Callback runs if there is no true case.
  */
-function otherWise (callback: anyFunction) {
+function otherWise<TParam, TResult> (callback: (param: TParam) => TResult): Cases<TParam, TParam, TResult> {
   return when(() => true, callback)
 }
 
@@ -56,8 +72,8 @@ function otherWise (callback: anyFunction) {
  *
  * @param {...any} conditions Needs to be a function or a object whose end value is a function. The function needs to return a boolean.
  */
-function allOf (...conditions : Condition[]) : ConditionFunction {
-  return function (args : any) {
+function allOf<TParam, TGuarded extends TParam> (...conditions: Condition<TParam, TGuarded>[]): ConditionFunction<TParam, TGuarded> {
+  return function (args: any) {
     return isArray(args) && conditions.every(condition => args.every(arg => checkCondition(condition, arg)))
   }
 }
@@ -67,8 +83,8 @@ function allOf (...conditions : Condition[]) : ConditionFunction {
  *
  * @param {...any} conditions Needs to be a function or a object whose end value is a function. The function needs to return a boolean.
  */
-function anyOf (...conditions : Condition[]) : ConditionFunction {
-  return function (args : any) {
+function anyOf<TParam, TGuarded extends TParam> (...conditions: Condition<TParam, TGuarded>[]): ConditionFunction<TParam, TGuarded> {
+  return function (args: any) {
     return isArray(args) && conditions.some(condition => args.some(arg => checkCondition(condition, arg)))
   }
 }
@@ -78,7 +94,7 @@ function anyOf (...conditions : Condition[]) : ConditionFunction {
  *
  * @param param Can be anything.
  */
-function includes (param : any) : ConditionFunction {
+function includes<TParam, TGuarded extends TParam> (param: TParam): ConditionFunction<TParam, TGuarded> {
   return function (args: any) {
     return isArray(args) && args.includes(param)
   }

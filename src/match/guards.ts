@@ -102,7 +102,7 @@ function isNull (param: any): param is null {
  * @param y The second value in the range.
  */
 function inRange (x: number, y: number) {
-  return function (params: any) {
+  return function (params: any) : params is number {
     return isNumber(params) && (params >= Math.min(x, y) && params <= Math.max(x, y))
   }
 }
